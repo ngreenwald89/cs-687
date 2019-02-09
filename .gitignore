@@ -2,3 +2,6 @@
 test_cases/
 __pycache__/
 *.zip
+*.npz
+
+.idea/
