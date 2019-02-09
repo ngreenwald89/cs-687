@@ -37,7 +37,10 @@ class PerceptronModel(object):
         Returns: 1 or -1
         """
         "*** YOUR CODE HERE ***"
-        if nn.as_scalar(self.run(x)) > 0:
+        # print(f'x: {x}')
+        # print(f'self.run(x): {self.run(x)}')
+        # print(f'nn.as_scalar(self.run(x)): {nn.as_scalar(self.run(x))}')
+        if nn.as_scalar(self.run(x)) >= 0:
             return 1
         else:
             return -1
@@ -56,13 +59,24 @@ which will perform the update to the weights:
     The direction argument is a Node with the same shape as the parameter, and the multiplier argument is a Python scalar.'''
 
         "*** YOUR CODE HERE ***"
-        perfect_accuracy = False
-        for x, y in dataset.iterate_once(1):
-            p = self.get_prediction(x)
-            if p > y:
-                self.w.update(x, -1)
-            elif p < y:
-                self.w.update(x, 1)
+        updated = True
+        i = 0
+        while updated:
+            updates = 0
+            updated = False  # keep training until no updates, meaning 100% accuracy
+            for x, y in dataset.iterate_once(1):
+                y_as_scalar = nn.as_scalar(y)
+                p = self.get_prediction(x)
+                if p > y_as_scalar:
+                    self.w.update(x, -1)
+                    updates += 1
+                    updated = True
+                elif p < y_as_scalar:
+                    self.w.update(x, 1)
+                    updates += 1
+                    updated = True
+            print(f'i: {i}, updates: {updates}')
+            i += 1
 
 class RegressionModel(object):
     """
