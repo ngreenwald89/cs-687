@@ -1,4 +1,5 @@
 import nn
+import numpy as np
 
 
 class PerceptronModel(object):
@@ -59,7 +60,7 @@ which will perform the update to the weights:
     The direction argument is a Node with the same shape as the parameter, and the multiplier argument is a Python scalar.'''
 
         "*** YOUR CODE HERE ***"
-        updated = True
+        updated = True  # initialize updated to True to start while loop
         i = 0
         while updated:
             updates = 0
@@ -78,6 +79,7 @@ which will perform the update to the weights:
             print(f'i: {i}, updates: {updates}')
             i += 1
 
+
 class RegressionModel(object):
     """
     A neural network model for approximating a function that maps from real
@@ -87,6 +89,16 @@ class RegressionModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.hidden_layer_size = 10  # recommended between 10 and 400
+        self.batch_size = 1  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
+        self.learning_rate = .01  # between .001 and 1.0
+        self.num_hidden_layers = 1  # between 1 and 3
+        self.w1 = nn.Parameter(1, self.hidden_layer_size)  # input for q2 has one feature
+        self.b1 = nn.Parameter(1, self.hidden_layer_size)
+        self.w2 = nn.Parameter(self.hidden_layer_size, 1)  # output for q2 has one feature
+        self.b2 = nn.Parameter(1, 1)
+        self.activation_1 = None  # cached forward prop output of first layer. Used in back-prop.
+
 
     def run(self, x):
         """
@@ -98,6 +110,16 @@ class RegressionModel(object):
             A node with shape (batch_size x 1) containing predicted y-values
         """
         "*** YOUR CODE HERE ***"
+        xm = nn.Linear(x, self.w1)
+        # print(f'xm: {xm}, b: {self.b1}')
+        activation_1 = nn.ReLU(nn.AddBias(xm, self.b1))  # shape: (batch_size x hidden_layer_size)
+        self.activation_1 = activation_1  # store for use in back-prop
+        # print(f'activation_1: {activation_1}')
+        activation_2 = nn.Linear(activation_1, self.w2)  # shape: (hidden_layer_size x output_dim)
+        # print(f'activation_2: {activation_2}')
+        predicted_y = nn.AddBias(activation_2, self.b2)
+        # print(f'predicted_y: {predicted_y}')
+        return predicted_y
 
     def get_loss(self, x, y):
         """
@@ -110,12 +132,65 @@ class RegressionModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        predicted_y = self.run(x)
+        return nn.SquareLoss(predicted_y, y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        i = 0
+        while True:
+            cumulative_loss = 0
+            for x, y in dataset.iterate_once(self.batch_size):
+                loss = self.get_loss(x, y)
+                grad_wrt_w2, grad_wrt_b2 = nn.gradients(loss, [self.w2, self.b2])
+                self.w2.update(grad_wrt_w2, self.learning_rate)
+                self.b2.update(grad_wrt_b2, self.learning_rate)
+
+                derivs = np.array([np.array([self.relu_derivative(x) for x in example]) for example in self.activation_1.data])
+                w1_dot = nn.as_scalar(nn.Linear(self.w1, grad_wrt_w2))
+                grad_wrt_w1 = derivs * w1_dot
+                grad_wrt_w1 = nn.Constant(grad_wrt_w1)
+
+                try:
+                    self.w1.update(grad_wrt_w1, self.learning_rate)
+                except Exception as e:
+                    print(f'derivs: {derivs}')
+                    print(f'self.w1.data: {self.w1.data}')
+                    print(f'grad_wrt_2.data: {grad_wrt_w2.data}')
+                    print(f'w1_dot: {w1_dot}')
+                    print(f'grad_wrt_w1: {grad_wrt_w1.data}')
+                    print(e)
+                    break
+
+                # print(f'self.b1: {self.b1}, grad_wrt_b2: {grad_wrt_b2}')
+                # b1_dot = nn.as_scalar(nn.Linear(grad_wrt_b2, self.b1))
+                # grad_wrt_b1 = derivs * b1_dot
+                # grad_wrt_b1 = nn.Constant(grad_wrt_b1)
+                #
+                # try:
+                #     self.b1.update(grad_wrt_b1, self.learning_rate)
+                # except Exception as e:
+                #     print(f'derivs: {derivs}')
+                #     print(f'b1_dot: {b1_dot}')
+                #     print(f'grad_wrt_b1: {grad_wrt_b1.data}')
+                #     print(e)
+                #     break
+
+                cumulative_loss += nn.as_scalar(loss)
+            print(f'i: {i}, cumulative_loss: {cumulative_loss}')
+            i += 1
+            if cumulative_loss <= .02:
+                return
+
+    def relu_derivative(self, value):
+        if value > 0:
+            return 1
+        else:
+            return 0
+
 
 class DigitClassificationModel(object):
     """
