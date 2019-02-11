@@ -90,8 +90,8 @@ class RegressionModel(object):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
         self.hidden_layer_size = 10  # recommended between 10 and 400
-        self.batch_size = 1  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
-        self.learning_rate = .01  # between .001 and 1.0
+        self.batch_size = 5  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
+        self.learning_rate = .005  # between .001 and 1.0
         self.num_hidden_layers = 1  # between 1 and 3
         self.w1 = nn.Parameter(1, self.hidden_layer_size)  # input for q2 has one feature
         self.b1 = nn.Parameter(1, self.hidden_layer_size)
@@ -118,7 +118,7 @@ class RegressionModel(object):
         activation_2 = nn.Linear(activation_1, self.w2)  # shape: (hidden_layer_size x output_dim)
         # print(f'activation_2: {activation_2}')
         predicted_y = nn.AddBias(activation_2, self.b2)
-        # print(f'predicted_y: {predicted_y}')
+        # print(f'predicted_y: {predicted_y.data}')
         return predicted_y
 
     def get_loss(self, x, y):
@@ -145,39 +145,50 @@ class RegressionModel(object):
             cumulative_loss = 0
             for x, y in dataset.iterate_once(self.batch_size):
                 loss = self.get_loss(x, y)
+                # print(f'loss: {loss.data}')
                 grad_wrt_w2, grad_wrt_b2 = nn.gradients(loss, [self.w2, self.b2])
                 self.w2.update(grad_wrt_w2, self.learning_rate)
                 self.b2.update(grad_wrt_b2, self.learning_rate)
+                # print(f'grad_wrt_2.data: {grad_wrt_w2.data}')
 
-                derivs = np.array([np.array([self.relu_derivative(x) for x in example]) for example in self.activation_1.data])
+                # using nn.gradients()  -- doesn't work, nn.gradients() needs a loss node.
+                # w1_dot = nn.Constant(nn.Linear(self.w1, grad_wrt_w2).data)
+                # grad_wrt_w1, grad_wrt_b1 = nn.gradients(w1_dot, [self.w1, self.b1])
+                # self.w1.update(grad_wrt_w1, self.learning_rate)
+                # self.b1.update(grad_wrt_b1, self.learning_rate)
+
+                # doing the derivatives yourself approach. This trains data but does not converge. Goes to infinity.
+                derivs = np.array([np.array([float(self.relu_derivative(x)) for x in example]) for example in self.activation_1.data])
                 w1_dot = nn.as_scalar(nn.Linear(self.w1, grad_wrt_w2))
-                grad_wrt_w1 = derivs * w1_dot
+                grad_wrt_w1 = np.array([(derivs * w1_dot).mean(0)])
+                # print(f'grad_wrt_w1.shape: {grad_wrt_w1.shape}')
                 grad_wrt_w1 = nn.Constant(grad_wrt_w1)
+                # print(f'grad_wrt_w1: {grad_wrt_w1}, self.w1: {self.w1}')
 
                 try:
                     self.w1.update(grad_wrt_w1, self.learning_rate)
+                    # print(f'SUCCESS: updated w1')
                 except Exception as e:
+                    print(f'FAIL: w1 update, error: {e}')
                     print(f'derivs: {derivs}')
-                    print(f'self.w1.data: {self.w1.data}')
-                    print(f'grad_wrt_2.data: {grad_wrt_w2.data}')
+                    print(f'self.w1: {self.w1}')
+                    print(f'grad_wrt_2: {grad_wrt_w2}')
                     print(f'w1_dot: {w1_dot}')
-                    print(f'grad_wrt_w1: {grad_wrt_w1.data}')
-                    print(e)
+                    print(f'grad_wrt_w1: {grad_wrt_w1}')
                     break
 
-                # print(f'self.b1: {self.b1}, grad_wrt_b2: {grad_wrt_b2}')
-                # b1_dot = nn.as_scalar(nn.Linear(grad_wrt_b2, self.b1))
-                # grad_wrt_b1 = derivs * b1_dot
-                # grad_wrt_b1 = nn.Constant(grad_wrt_b1)
-                #
-                # try:
-                #     self.b1.update(grad_wrt_b1, self.learning_rate)
-                # except Exception as e:
-                #     print(f'derivs: {derivs}')
-                #     print(f'b1_dot: {b1_dot}')
-                #     print(f'grad_wrt_b1: {grad_wrt_b1.data}')
-                #     print(e)
-                #     break
+                # print(f'self.b1: {self.b1}, grad_wrt_b2: {grad_wrt_b2}, derivs: {derivs}')
+                derivs2 = nn.Constant(np.array([derivs.mean(0)]))
+                grad_wrt_b1 = nn.Constant(nn.Linear(grad_wrt_b2, derivs2).data)
+
+                try:
+                    self.b1.update(grad_wrt_b1, self.learning_rate)
+                    # print(f'SUCCESS: updated b1')
+                except Exception as e:
+                    print(f'FAIL: b1 update, error: {e}')
+                    print(f'derivs: {derivs}')
+                    print(f'grad_wrt_b1: {grad_wrt_b1.data}')
+                    break
 
                 cumulative_loss += nn.as_scalar(loss)
             print(f'i: {i}, cumulative_loss: {cumulative_loss}')
