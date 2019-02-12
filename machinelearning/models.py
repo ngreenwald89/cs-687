@@ -1,6 +1,5 @@
 import nn
-import numpy as np
-
+from time import time
 
 class PerceptronModel(object):
     def __init__(self, dimensions):
@@ -89,16 +88,15 @@ class RegressionModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
-        self.hidden_layer_size = 10  # recommended between 10 and 400
-        self.batch_size = 5  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
-        self.learning_rate = .005  # between .001 and 1.0
+        self.hidden_layer_size = 13  # recommended between 10 and 400
+        self.batch_size = 20  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
+        self.learning_rate = .04  # between .001 and 1.0
         self.num_hidden_layers = 1  # between 1 and 3
         self.w1 = nn.Parameter(1, self.hidden_layer_size)  # input for q2 has one feature
         self.b1 = nn.Parameter(1, self.hidden_layer_size)
         self.w2 = nn.Parameter(self.hidden_layer_size, 1)  # output for q2 has one feature
         self.b2 = nn.Parameter(1, 1)
-        self.activation_1 = None  # cached forward prop output of first layer. Used in back-prop.
-
+        self.start = time()
 
     def run(self, x):
         """
@@ -113,7 +111,6 @@ class RegressionModel(object):
         xm = nn.Linear(x, self.w1)
         # print(f'xm: {xm}, b: {self.b1}')
         activation_1 = nn.ReLU(nn.AddBias(xm, self.b1))  # shape: (batch_size x hidden_layer_size)
-        self.activation_1 = activation_1  # store for use in back-prop
         # print(f'activation_1: {activation_1}')
         activation_2 = nn.Linear(activation_1, self.w2)  # shape: (hidden_layer_size x output_dim)
         # print(f'activation_2: {activation_2}')
@@ -146,61 +143,24 @@ class RegressionModel(object):
             for x, y in dataset.iterate_once(self.batch_size):
                 loss = self.get_loss(x, y)
                 # print(f'loss: {loss.data}')
-                grad_wrt_w2, grad_wrt_b2 = nn.gradients(loss, [self.w2, self.b2])
-                self.w2.update(grad_wrt_w2, self.learning_rate)
-                self.b2.update(grad_wrt_b2, self.learning_rate)
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_b1 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.b1])
+                self.w2.update(grad_wrt_w2, -self.learning_rate)
+                self.b2.update(grad_wrt_b2, -self.learning_rate)
                 # print(f'grad_wrt_2.data: {grad_wrt_w2.data}')
 
-                # using nn.gradients()  -- doesn't work, nn.gradients() needs a loss node.
-                # w1_dot = nn.Constant(nn.Linear(self.w1, grad_wrt_w2).data)
-                # grad_wrt_w1, grad_wrt_b1 = nn.gradients(w1_dot, [self.w1, self.b1])
-                # self.w1.update(grad_wrt_w1, self.learning_rate)
-                # self.b1.update(grad_wrt_b1, self.learning_rate)
+                self.w1.update(grad_wrt_w1, -self.learning_rate)
+                self.b1.update(grad_wrt_b1, -self.learning_rate)
 
-                # doing the derivatives yourself approach. This trains data but does not converge. Goes to infinity.
-                derivs = np.array([np.array([float(self.relu_derivative(x)) for x in example]) for example in self.activation_1.data])
-                w1_dot = nn.as_scalar(nn.Linear(self.w1, grad_wrt_w2))
-                grad_wrt_w1 = np.array([(derivs * w1_dot).mean(0)])
-                # print(f'grad_wrt_w1.shape: {grad_wrt_w1.shape}')
-                grad_wrt_w1 = nn.Constant(grad_wrt_w1)
                 # print(f'grad_wrt_w1: {grad_wrt_w1}, self.w1: {self.w1}')
 
-                try:
-                    self.w1.update(grad_wrt_w1, self.learning_rate)
-                    # print(f'SUCCESS: updated w1')
-                except Exception as e:
-                    print(f'FAIL: w1 update, error: {e}')
-                    print(f'derivs: {derivs}')
-                    print(f'self.w1: {self.w1}')
-                    print(f'grad_wrt_2: {grad_wrt_w2}')
-                    print(f'w1_dot: {w1_dot}')
-                    print(f'grad_wrt_w1: {grad_wrt_w1}')
-                    break
-
-                # print(f'self.b1: {self.b1}, grad_wrt_b2: {grad_wrt_b2}, derivs: {derivs}')
-                derivs2 = nn.Constant(np.array([derivs.mean(0)]))
-                grad_wrt_b1 = nn.Constant(nn.Linear(grad_wrt_b2, derivs2).data)
-
-                try:
-                    self.b1.update(grad_wrt_b1, self.learning_rate)
-                    # print(f'SUCCESS: updated b1')
-                except Exception as e:
-                    print(f'FAIL: b1 update, error: {e}')
-                    print(f'derivs: {derivs}')
-                    print(f'grad_wrt_b1: {grad_wrt_b1.data}')
-                    break
-
                 cumulative_loss += nn.as_scalar(loss)
-            print(f'i: {i}, cumulative_loss: {cumulative_loss}')
+            if i % 100 == 0:
+                time_elapsed = round(time() - self.start, 2)
+                print(f'i: {i}, cumulative_loss: {cumulative_loss}: time elapsed: {time_elapsed} seconds')
             i += 1
             if cumulative_loss <= .02:
+                print(f'Success! hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
                 return
-
-    def relu_derivative(self, value):
-        if value > 0:
-            return 1
-        else:
-            return 0
 
 
 class DigitClassificationModel(object):
@@ -220,6 +180,15 @@ class DigitClassificationModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.hidden_layer_size = 100  # recommended between 10 and 400
+        self.batch_size = 25  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
+        self.learning_rate = .05  # between .001 and 1.0
+        self.num_hidden_layers = 1  # between 1 and 3
+        self.w1 = nn.Parameter(784, self.hidden_layer_size)  # input for q2 has one feature
+        self.b1 = nn.Parameter(1, self.hidden_layer_size)
+        self.w2 = nn.Parameter(self.hidden_layer_size, 10)  # output for q2 has one feature
+        self.b2 = nn.Parameter(1, 10)
+        self.start = time()
 
     def run(self, x):
         """
@@ -236,6 +205,11 @@ class DigitClassificationModel(object):
                 (also called logits)
         """
         "*** YOUR CODE HERE ***"
+        xm = nn.Linear(x, self.w1)
+        activation_1 = nn.ReLU(nn.AddBias(xm, self.b1))  # shape: (batch_size x hidden_layer_size)
+        activation_2 = nn.Linear(activation_1, self.w2)  # shape: (hidden_layer_size x output_dim)
+        predicted_y = nn.AddBias(activation_2, self.b2)
+        return predicted_y
 
     def get_loss(self, x, y):
         """
@@ -251,12 +225,38 @@ class DigitClassificationModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        predicted_y = self.run(x)
+        return nn.SoftmaxLoss(predicted_y, y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        print(
+            f'Training Parameters - hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
+        i = 0
+        while True:
+
+            for x, y in dataset.iterate_once(self.batch_size):
+                loss = self.get_loss(x, y)
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_b1 = nn.gradients(loss,
+                                                                                  [self.w2, self.b2, self.w1, self.b1])
+                self.w2.update(grad_wrt_w2, -self.learning_rate)
+                self.b2.update(grad_wrt_b2, -self.learning_rate)
+
+                self.w1.update(grad_wrt_w1, -self.learning_rate)
+                self.b1.update(grad_wrt_b1, -self.learning_rate)
+
+            time_elapsed = round(time() - self.start, 2)
+            validation_accuracy = dataset.get_validation_accuracy()
+            print(f'i: {i}, validation_accuracy: {validation_accuracy}: time elapsed: {time_elapsed} seconds')
+            i += 1
+            if validation_accuracy >= .9705:
+                print(
+                    f'Success! hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
+                return
+
 
 class LanguageIDModel(object):
     """
