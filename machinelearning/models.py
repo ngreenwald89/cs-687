@@ -350,7 +350,7 @@ class LanguageIDModel(object):
                 h = self.f(h, batch)
         # Have summarized arbitrary length xs into h = Node(batch_size x hidden_size). Now calculate Node(batch_size x 5) for language prediction.
         activation_1 = nn.AddBias(h, self.b1)
-        activation_2 = nn.Linear(h, self.w2)
+        activation_2 = nn.Linear(activation_1, self.w2)
         predicted_y = nn.AddBias(activation_2, self.b2)
 
         return predicted_y
@@ -384,11 +384,12 @@ class LanguageIDModel(object):
 
             for xs, y in dataset.iterate_once(self.batch_size):
                 loss = self.get_loss(xs, y)
-                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_w0 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.w0])
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_b1, grad_wrt_w0 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.b1, self.w0])
 
                 self.w2.update(grad_wrt_w2, -self.learning_rate)
                 self.b2.update(grad_wrt_b2, -self.learning_rate)
                 self.w1.update(grad_wrt_w1, -self.learning_rate)
+                self.b1.update(grad_wrt_b1, -self.learning_rate)
                 self.w0.update(grad_wrt_w0, -self.learning_rate)
 
             time_elapsed = round(time() - self.start, 2)
