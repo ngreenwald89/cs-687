@@ -1,6 +1,7 @@
 import nn
 from time import time
 
+
 class PerceptronModel(object):
     def __init__(self, dimensions):
         """
@@ -88,9 +89,9 @@ class RegressionModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
-        self.hidden_layer_size = 13  # recommended between 10 and 400
-        self.batch_size = 20  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
-        self.learning_rate = .04  # between .001 and 1.0
+        self.hidden_layer_size = 100  # recommended between 10 and 400
+        self.batch_size = 100  # between 1 and size of dataset. Require total size of dataset evenly divisible by batch_size.  q2 dataset size=200
+        self.learning_rate = .05  # between .001 and 1.0
         self.num_hidden_layers = 1  # between 1 and 3
         self.w1 = nn.Parameter(1, self.hidden_layer_size)  # input for q2 has one feature
         self.b1 = nn.Parameter(1, self.hidden_layer_size)
@@ -137,6 +138,7 @@ class RegressionModel(object):
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        input(f'Training Parameters - hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
         i = 0
         while True:
             cumulative_loss = 0
@@ -235,7 +237,7 @@ class DigitClassificationModel(object):
         "*** YOUR CODE HERE ***"
         print(
             f'Training Parameters - hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
-        i = 0
+        epoch = 1
         while True:
 
             for x, y in dataset.iterate_once(self.batch_size):
@@ -250,9 +252,9 @@ class DigitClassificationModel(object):
 
             time_elapsed = round(time() - self.start, 2)
             validation_accuracy = dataset.get_validation_accuracy()
-            print(f'i: {i}, validation_accuracy: {validation_accuracy}: time elapsed: {time_elapsed} seconds')
-            i += 1
-            if validation_accuracy >= .9705:
+            print(f'epoch: {epoch}, validation_accuracy: {validation_accuracy}: time elapsed: {time_elapsed} seconds')
+            epoch += 1
+            if validation_accuracy >= .9705:  # it seems the validation_accuracy is not always exactly the same as what the autograder gets, so training a little longer ensures passing the autograder.
                 print(
                     f'Success! hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
                 return
@@ -276,6 +278,36 @@ class LanguageIDModel(object):
 
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.learning_rate = .05
+        self.hidden_layer_size = 100
+        self.batch_size = 25
+        self.num_hidden_layers = 1
+        self.w0 = nn.Parameter(self.num_chars, self.hidden_layer_size)
+        self.w1 = nn.Parameter(self.hidden_layer_size, self.hidden_layer_size)
+        self.w2 = nn.Parameter(self.hidden_layer_size, len(self.languages))
+        self.b1 = nn.Parameter(1, self.hidden_layer_size)
+        self.b2 = nn.Parameter(1, len(self.languages))
+        self.start = time()
+
+    def f_init(self, x):
+        """
+        
+        :param x: <Constant shape batch_size x 47>
+        :return: z = nn.Linear(x, W) 
+        """
+        z = nn.Linear(x, self.w0)
+        return nn.ReLU(z)
+
+    def f(self, h, x):
+        """
+        :param h: 
+        :param x: 
+        :return: z = nn.Add(nn.Linear(x, W), nn.Linear(h, W_hidden)) 
+        """
+        z0 = nn.Linear(x, self.w0)
+        z1 = nn.Linear(h, self.w1)
+        z = nn.Add(z0, z1)
+        return nn.ReLU(z)
 
     def run(self, xs):
         """
@@ -307,6 +339,21 @@ class LanguageIDModel(object):
                 (also called logits)
         """
         "*** YOUR CODE HERE ***"
+        # xs = [Node(b x num_chars), Node(b x num_chars), ...] ==> Node(b x hid), then Node(b x hid) ==> Node(batch_size x 5)
+
+        for i, batch in enumerate(xs):
+            if i == 0:
+                # z = nn.Linear(x0, self.w0)
+                h = self.f_init(batch)  # batch can be arbitrary length n, <Constant shape=nx47>
+            else:
+                # z = nn.Add(nn.Linear(x, self.w0), nn.Linear(nn.Linear(h, self.w1)))
+                h = self.f(h, batch)
+        # Have summarized arbitrary length xs into h = Node(batch_size x hidden_size). Now calculate Node(batch_size x 5) for language prediction.
+        activation_1 = nn.AddBias(h, self.b1)
+        activation_2 = nn.Linear(h, self.w2)
+        predicted_y = nn.AddBias(activation_2, self.b2)
+
+        return predicted_y
 
     def get_loss(self, xs, y):
         """
@@ -323,9 +370,33 @@ class LanguageIDModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        predicted_y = self.run(xs)
+        return nn.SoftmaxLoss(predicted_y, y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        print(f'Training Parameters - hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
+        epoch = 1
+        while True:
+
+            for xs, y in dataset.iterate_once(self.batch_size):
+                loss = self.get_loss(xs, y)
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_w0 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.w0])
+
+                self.w2.update(grad_wrt_w2, -self.learning_rate)
+                self.b2.update(grad_wrt_b2, -self.learning_rate)
+                self.w1.update(grad_wrt_w1, -self.learning_rate)
+                self.w0.update(grad_wrt_w0, -self.learning_rate)
+
+            time_elapsed = round(time() - self.start, 2)
+            validation_accuracy = dataset.get_validation_accuracy()
+            print(f'epoch: {epoch}, validation_accuracy: {validation_accuracy}: time elapsed: {time_elapsed} seconds')
+
+            epoch += 1
+            if validation_accuracy >= .85:  # it seems the validation_accuracy is not always exactly the same as what the autograder gets, so training a little longer ensures passing the autograder.
+                print(f'Success! hidden_layer_size: {self.hidden_layer_size}, batch_size: {self.batch_size}, learning_rate: {self.learning_rate}')
+                return
+
