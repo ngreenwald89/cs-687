@@ -107,12 +107,9 @@ class RegressionModel(object):
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
-        
-        
         while True:
             total_loss = 0
             for x, y  in dataset.iterate_once(5):
-#                output = self.run(x)
                 loss = self.get_loss(x, y)
                 total_loss += nn.as_scalar(loss)
                 
@@ -145,6 +142,13 @@ class DigitClassificationModel(object):
     def __init__(self):
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.batchsize = 50
+        self.layersize = 300
+        self.learning = 0.05
+        self.w1 = nn.Parameter(784,self.layersize)
+        self.b1 = nn.Parameter(1,self.layersize)
+        self.w2 = nn.Parameter(self.layersize,10)
+        self.b2 = nn.Parameter(1,10)
 
     def run(self, x):
         """
@@ -161,6 +165,8 @@ class DigitClassificationModel(object):
                 (also called logits)
         """
         "*** YOUR CODE HERE ***"
+        first_layer = nn.ReLU(nn.AddBias(nn.Linear(x,self.w1), self.b1))
+        return nn.AddBias(nn.Linear(first_layer,self.w2), self.b2)
 
     def get_loss(self, x, y):
         """
@@ -176,12 +182,30 @@ class DigitClassificationModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        return nn.SoftmaxLoss(self.run(x), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        while True:
+            total_loss = 0
+            for x, y  in dataset.iterate_once(self.batchsize):
+                loss = self.get_loss(x, y)
+                total_loss += nn.as_scalar(loss)
+                
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_b1 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.b1]) 
+                self.w2.update(grad_wrt_w2, -self.learning)
+                self.b2.update(grad_wrt_b2, -self.learning)
+    
+                self.b1.update(grad_wrt_b1, -self.learning)
+                self.w1.update(grad_wrt_w1, -self.learning)
+            
+            validation = dataset.get_validation_accuracy()
+            print(validation)
+            if (validation >= 0.97):
+                return
 
 class LanguageIDModel(object):
     """
@@ -201,6 +225,14 @@ class LanguageIDModel(object):
 
         # Initialize your model parameters here
         "*** YOUR CODE HERE ***"
+        self.batchsize = 25
+        self.layersize = 400
+        self.learning = 0.07
+        self.w1 = nn.Parameter(self.num_chars,self.layersize)
+        self.b1 = nn.Parameter(1,self.layersize)
+        self.w2 = nn.Parameter(self.layersize,5)
+        self.b2 = nn.Parameter(1,5)
+        self.w3 = nn.Parameter(self.layersize,self.layersize)
 
     def run(self, xs):
         """
@@ -233,6 +265,25 @@ class LanguageIDModel(object):
         """
         "*** YOUR CODE HERE ***"
 
+        cur_out = None
+        for i in range(len(xs)):
+            if i == 0:
+                prev_out = self.initial(xs[i])
+            else:
+                cur_out = self.hidden(prev_out, xs[i])
+            
+            if cur_out != None:
+                prev_out = cur_out
+        
+        first_layer = nn.ReLU(nn.AddBias(prev_out, self.b1))
+        return nn.AddBias(nn.Linear(first_layer,self.w2), self.b2)
+    
+    def initial(self, x):
+        return nn.Linear(x,self.w1)
+    
+    def hidden(self, h, x):
+        return nn.Add(nn.Linear(x, self.w1), nn.Linear(h, self.w3))
+        
     def get_loss(self, xs, y):
         """
         Computes the loss for a batch of examples.
@@ -248,9 +299,29 @@ class LanguageIDModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
+        return nn.SoftmaxLoss(self.run(xs), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
+        while True:
+            total_loss = 0
+            for x, y  in dataset.iterate_once(self.batchsize):
+                loss = self.get_loss(x, y)
+                total_loss += nn.as_scalar(loss)
+                
+                grad_wrt_w2, grad_wrt_b2, grad_wrt_w1, grad_wrt_b1, grad_wrt_w3 = nn.gradients(loss, [self.w2, self.b2, self.w1, self.b1, self.w3]) 
+                self.w2.update(grad_wrt_w2, -self.learning)
+                self.b2.update(grad_wrt_b2, -self.learning)
+    
+                self.b1.update(grad_wrt_b1, -self.learning)
+                self.w1.update(grad_wrt_w1, -self.learning)
+                
+                self.w3.update(grad_wrt_w3, -self.learning)
+            
+            validation = dataset.get_validation_accuracy()
+            print(validation)
+            if (validation >= 0.82):
+                return
